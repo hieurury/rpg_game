@@ -21,15 +21,16 @@ func _process(delta: float) -> void:
 # 2. Không nhận dame ngoài hitbox
 # 3. Không nhận dame liên tục, sẽ có thời gian countdown
 func _on_area_entered(area):
-	print("dô đây")
+	#không nhận dame từ đồng minh
+	if area.get_parent().is_in_group("warrior"):
+		return;
 	if !area.is_in_group("hitbox"):
 		return;
 	if area.get_parent() == get_parent():
 		return;
 	if countdown_damge_time > 0:
 		return;
-	print("gây được dame")
 	countdown_damge_time = COUNTDOWN_TIME;
-	var damage = area.get_parent().DAMAGE  # lấy damage từ kẻ tấn công
-	emit_signal("took_damage", damage)
+	var damage = area.get_parent().CURRENT_DAMAGE  # lấy damage từ kẻ tấn công
+	emit_signal("took_damage", damage);
 	emit_signal("countdown_time", COUNTDOWN_TIME);

@@ -8,14 +8,18 @@ extends CharacterBody2D
 
 
 # Thông số cơ bản
-const DAMAGE = 10.0
-const HP = 100.0
-const SPEED = 20.0
-const ATTACK_RANGE = 20.0
-const ATTACK_COUNTDOWN = 0.4
+var BASE_DAMAGE = 10.0 # sát thương cơ bản
+const BASE_HP = 100.0 # HP cơ bản
+const SPEED = 20.0 # tốc độ di chuyển
+const ATTACK_RANGE = 20.0 # Tầm đánh
+const ATTACK_COUNTDOWN = 0.4 # tốc đánh
+const PERCENT_HP_RECOVERY = 10 # Hồi hp khi không bị tấn công
 
 # Chỉ số có thể biến đổi
-var CURRENT_HP = HP;
+var LEVEL;
+var MAX_HP = BASE_HP;
+var CURRENT_HP = BASE_HP;
+var CURRENT_DAMAGE = BASE_DAMAGE;
 
 
 # Di chuyển
@@ -31,10 +35,15 @@ var current_target = null;
 var is_attack = false;
 var attack_timer = 0.0;
 
+# Các biến timer
+var recovery_timer = 3;
+
 
 # signal
 #khi hp đổi
-signal hp_changed(max_hp, current_hp)
+signal hp_changed(max_hp, current_hp);
+signal lv_changed(lv);
+signal is_death();
 
 # Quét các mục tiêu trong và ngoài phạm vi
 func _ready() -> void:
@@ -45,26 +54,47 @@ func _ready() -> void:
 	animationPlayer.animation_finished.connect(_on_attack_finished);
 	# Kết nối hurtbox
 	hurtbox.took_damage.connect(_on_took_damage);
-	hurtbox.countdown_time.connect(flash);
+	hurtbox.countdown_time.connect(flash_gain_dame);
+	# Khởi tạo lại chỉ số theo lv
+	# Khởi tạo lv ngẫu nhiên
+	LEVEL = randi_range(1, 5);
+	MAX_HP = BASE_HP * (1 + LEVEL * 0.25)
+	CURRENT_DAMAGE = BASE_DAMAGE * (1 + LEVEL * 0.2)
+	CURRENT_HP = MAX_HP;
 	# đặt hp bar
 	#bắn signal cho HPbar để khởi tạo
-	emit_signal("hp_changed", HP, CURRENT_HP);
+	emit_signal("hp_changed", MAX_HP, CURRENT_HP);
+	#bắn signal lv lần đầu
+	emit_signal("lv_changed", LEVEL);
+	
 	
 
+# ================================= CÁC HÀM HỖ TRỢ CHO CÁC CHỨC NĂNG ================
+# lắng nghe animation kết thúc
 func _on_attack_finished(anim_name: StringName):
-	const attack_list = ["attack_left", "attack_down", "attack_up"];
+	# các animation cần lắng nghe
+	const attack_list = ["attack_left", "attack_right", "attack_down", "attack_up"];
 	if attack_list.has(anim_name):
 		is_attack = false;
+		# đặt lại thời gian tấn công khi tấn công xong 1 lần
 		attack_timer = ATTACK_COUNTDOWN;
 
 # Thêm các mục tiêu trong phạm vi vào danh sách
 func _on_body_entered(body):
+	# không đánh bản thân
 	if body == self:
 		return
-	if !body.is_in_group("warrior"):
-		return
+	# mục tiêu cần đánh
+	const warrior_enemies: Array = [
+		"archer",
+		"magie",
+		"monster"
+	]
+	for enemy in warrior_enemies:
+		if body.is_in_group(enemy):
+			target_list.append(body)
+
 	
-	target_list.append(body)
 
 # loại bỏ các mục tiêu ngoài phạm vi
 func _on_body_exited(body):
@@ -76,21 +106,40 @@ func _on_took_damage(amount):
 	print("nhận damage: ", amount)
 	CURRENT_HP -= amount;
 	# dính dame hả? Dính thì bắn signal cho HPbar biết
-	emit_signal("hp_changed", HP, CURRENT_HP);
+	emit_signal("hp_changed", MAX_HP, CURRENT_HP);
+	
+	# điều kiện cook
 	if CURRENT_HP <= 0:
 		print("die");
 		queue_free();
+		emit_signal("is_death");
 		
 
-func flash(time):
-	# sáng trắng lên
-	sprites.modulate = Color(1, 1, 1, 1)  # trắng
+#khi nhận exp thay đổi
+func _on_gain_exp():
+	# muốn exp gì đó thì ở đây
+	emit_signal("lv_changed", LEVEL);
+
+
+func flash_gain_dame(time):
+	# sáng đỏ lên
+	sprites.modulate = Color(1.0, 0.29, 0.29, 1.0)  # trắng
 	
 	# tạo tween để fade về màu gốc
 	var tween = create_tween()
 	tween.tween_property(sprites, "modulate", Color(1, 1, 1, 1), time)\
-		.from(Color(10, 10, 10, 1))  # giá trị > 1 = sáng hơn bình thường
+		.from(Color(9.999, 2.375, 2.375, 1.0))  # giá trị > 1 = sáng hơn bình thường
 
+func flash_recovery(time):
+	# sáng đỏ lên
+	sprites.modulate = Color(0.223, 0.69, 0.32, 1.0)  # trắng
+	
+	# tạo tween để fade về màu gốc
+	var tween = create_tween()
+	tween.tween_property(sprites, "modulate", Color(1, 1, 1, 1), time)\
+		.from(Color(0.602, 1.042, 0.481, 1.0))  # giá trị > 1 = sáng hơn bình thường
+
+# ===================== CÁC HÀM LIÊN QUAN ĐẾN LOGIC CHÍNH CỦA NHÂN VẬT ==========================
 # tìm mục tiêu gần nhất
 func get_closest_target():
 	var closest = null;
@@ -109,7 +158,11 @@ func get_closest_target():
 	return closest;
 	
 func _physics_process(delta: float) -> void:
-	
+	# Khi đánh thì không làm gì cả, chỉ đánh thôi
+	if is_attack:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		return
 	# phân chia logic giữa đi đến mục tiêu và đi ngẫu hứng
 	#Nếu không có mục tiêu hoặc mục tiêu đó không tồn tại thì tìm thằng mới
 	if current_target == null or !is_instance_valid(current_target):
@@ -135,15 +188,23 @@ func _physics_process(delta: float) -> void:
 	# Nếu không có mục tiêu thì di chuyển ngẫu nhiên trên map
 	else:
 		change_time -= delta;
+		
+		# Hồi phục hp theo thời gian
+		if !is_attack:
+			recovery_timer -= delta
+			if recovery_timer < 0:
+				nature_hp_recovery(PERCENT_HP_RECOVERY);
 		# khi điếm ngược về 0 thì di chuyển ngẫu nhiên
 		if change_time < 0:
 			random_way();
 	
+	# Nhận được hướng di chuyển, thì cứ đi thôi
 	if direction:
 		velocity = direction * SPEED
 		latest_direction = velocity;
-	else:
+	else: # Không nhận được hướng di chuyển -> đứng yên
 		velocity = velocity.move_toward(Vector2.ZERO, SPEED);
+		
 	
 	if !is_attack:
 		direction_sprite(direction);
@@ -153,6 +214,7 @@ func _physics_process(delta: float) -> void:
 	if get_slide_collision_count() > 0:
 		random_way();
 
+# HÀM XÁC ĐỊNH HƯỚNG DI CHUYỂN NGẪU NHIÊN
 func random_way() -> void:
 	var randomX = randf_range(-1, 1);
 	var randomY = randf_range(-1, 1);
@@ -160,6 +222,7 @@ func random_way() -> void:
 	# dat lai thoi gian di chuyen
 	change_time = randf_range(2, 3);
 
+# HÀM THỰC HIỆN TẤN CÔNG
 func start_attack():
 	is_attack = true
 	var attack_dir = (current_target.global_position - global_position).normalized();
@@ -167,13 +230,10 @@ func start_attack():
 	
 	
 	if abs(attack_dir.x) > abs(attack_dir.y):
-		animation_name = "attack_left";
 		if attack_dir.x > 0:
-			sprites.flip_h = true;
-			hitbox.position.x = abs(hitbox.position.x);
+			animation_name = "attack_right";
 		else:
-			sprites.flip_h = false;
-			hitbox.position.x = -abs(hitbox.position.x);
+			animation_name = "attack_left";
 	elif attack_dir.y > 0:
 		animation_name = "attack_down";
 	else:
@@ -182,6 +242,7 @@ func start_attack():
 	animationPlayer.play(animation_name);
 	sprites.play(animation_name);
 
+# HÀM XÁC ĐỊNH SPRITE CẦN CHO DI CHUYỂN
 func direction_sprite(direction: Vector2) -> void:
 	# can xac dinh xem co dang di chuyen khong da
 	if is_attack:
@@ -213,3 +274,14 @@ func direction_sprite(direction: Vector2) -> void:
 				sprites.play("move_down");
 			else:
 				sprites.play("move_up");
+
+# HỒI HP TỰ NHIÊN
+func nature_hp_recovery(hp_recovery: float) -> void:
+	if CURRENT_HP >= MAX_HP:
+		return;
+	CURRENT_HP += CURRENT_HP / 100 * hp_recovery;
+	flash_recovery(0.3);
+	recovery_timer = 3;
+	if CURRENT_HP > MAX_HP:
+		CURRENT_HP = MAX_HP;
+	emit_signal("hp_changed", MAX_HP, CURRENT_HP);
