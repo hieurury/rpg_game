@@ -23,9 +23,10 @@ func _ready() -> void:
 	
 
 func _process(delta: float) -> void:
-	spawn_warrior_timer -= delta;
-	if warriors.size() < MAX_WARRIOR and spawn_warrior_timer < 0:
-		_spawn_warrior()
+	pass
+	#spawn_warrior_timer -= delta;
+	#if warriors.size() < MAX_WARRIOR and spawn_warrior_timer < 0:
+		#_spawn_warrior()
 		
 
 func _read_map_size() -> void:

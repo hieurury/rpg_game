@@ -664,7 +664,7 @@ shape = SubResource("CircleShape2D_3i3nt")
 [node name="AnimationPlayer" type="AnimationPlayer" parent="." unique_id=1313946204]
 libraries/ = SubResource("AnimationLibrary_2r1ff")
 
-[node name="Hitbox" type="Area2D" parent="." unique_id=2051177008]
+[node name="Hitbox" type="Area2D" parent="." unique_id=2051177008 groups=["hitbox"]]
 script = ExtResource("3_cuqp7")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Hitbox" unique_id=234199827]
